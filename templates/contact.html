@@ -1,0 +1,21 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<section class="section">
+    <div class="container text-center" style="max-width: 600px;">
+        <h2 class="section-title">Contact Us</h2>
+        <div class="card">
+            <p class="mb-2"><strong>Address:</strong><br>Village Main Road, Near Panchayat Office,<br>District Name,
+                State - PIN.</p>
+            <p class="mb-2"><strong>Phone:</strong> <a href="tel:+919876543210" style="color: var(--secondary);">+91
+                    98765 43210</a></p>
+            <p class="mb-2"><strong>Email:</strong> taxi@village.com</p>
+
+            <hr class="mb-2 mt-2">
+
+            <p>Admin Access?</p>
+            <a href="{{ url_for('login') }}" class="btn btn-secondary mt-2">Staff Login</a>
+        </div>
+    </div>
+</section>
+{% endblock %}

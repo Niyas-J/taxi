@@ -1,0 +1,44 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<section class="section">
+    <div class="container" style="max-width: 700px;">
+        <h2 class="section-title">Driver Code of Conduct</h2>
+        <div class="card">
+            <h3 style="color: var(--primary); margin-bottom: 1rem;">Safety & Ethics Agreement</h3>
+
+            <ul style="text-align: left; list-style-type: disc; padding-left: 20px; line-height: 1.8;">
+                <li><strong>Zero Tolerance for Alcohol/Drugs:</strong> No consumption before or during duty.</li>
+                <li><strong>Respect & Politeness:</strong> Treat all passengers with respect. No rude language.</li>
+                <li><strong>Women Safety:</strong> Maintain professional distance. Do not ask personal questions.</li>
+                <li><strong>Safe Driving:</strong> Follow speed limits and traffic rules. No rash driving.</li>
+                <li><strong>Privacy:</strong> Do not save customer phone numbers or contact them after the ride.</li>
+                <li><strong>Hygiene:</strong> Keep the vehicle clean and odor-free.</li>
+            </ul>
+
+            <div style="background: #fff3cd; color: #856404; padding: 1rem; margin-top: 1rem; border-radius: 8px;">
+                <strong>Note:</strong> 3 Complaints will lead to an automatic permanent ban.
+            </div>
+
+            <hr class="mt-2 mb-2">
+
+            <form action="{{ url_for('driver_agreement_submit') }}" method="POST">
+                <div class="form-group" style="display: flex; align-items: start; gap: 10px;">
+                    <input type="checkbox" id="agree" name="agree" required
+                        style="width: 20px; height: 20px; margin-top: 5px;">
+                    <label for="agree" style="font-weight: normal;">I have read and understood the rules. I pledge to
+                        follow them strictly to ensure passenger safety.</label>
+                </div>
+
+                <div class="form-group">
+                    <label for="driver_phone">Enter Registered Phone Number</label>
+                    <input type="tel" name="driver_phone" class="form-control" required
+                        placeholder="To verify identity">
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block">I Agree & Pledge</button>
+            </form>
+        </div>
+    </div>
+</section>
+{% endblock %}

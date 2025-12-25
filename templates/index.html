@@ -1,0 +1,79 @@
+{% extends "layout.html" %}
+
+{% block content %}
+
+<!-- Hero Section -->
+<section class="hero">
+    <div class="container">
+        <h1>Safe & Reliable Village Taxi</h1>
+        <p>Book a ride instantly using WhatsApp or our Website. Best prices for local trips and outstation.</p>
+        <a href="{{ url_for('book') }}" class="btn btn-accent btn-large">Book Now 🚖</a>
+    </div>
+</section>
+
+<!-- Features Section -->
+<section class="section">
+    <div class="container">
+        <h2 class="section-title">Why Choose Us?</h2>
+        <div class="card-grid">
+            <div class="card">
+                <i class="fas fa-rupee-sign" style="font-size: 2rem; color: var(--primary); margin-bottom: 1rem;"></i>
+                <h3>Affordable</h3>
+                <p>Low price guarantee for all village routes.</p>
+            </div>
+            <div class="card">
+                <i class="fas fa-shield-alt" style="font-size: 2rem; color: var(--primary); margin-bottom: 1rem;"></i>
+                <h3>Safe</h3>
+                <p>Verified drivers and well-maintained vehicles.</p>
+            </div>
+            <div class="card">
+                <i class="fas fa-clock" style="font-size: 2rem; color: var(--primary); margin-bottom: 1rem;"></i>
+                <h3>24/7 Service</h3>
+                <p>Available day and night for emergencies.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Our Vehicles Preview -->
+<section class="section" style="background-color: var(--gray-200);">
+    <div class="container">
+        <h2 class="section-title">Our Vehicles</h2>
+        <div class="card-grid">
+            {% for vehicle in vehicles[:3] %}
+            <div class="card">
+                <div
+                    style="background-color: #ddd; height: 180px; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 1rem;">
+                    <i class="fas fa-car" style="font-size: 4rem; color: #aaa;"></i>
+                </div>
+                <h3>{{ vehicle.name }}</h3>
+                <p class="price">₹{{ vehicle.price_per_km }}/km</p>
+                <p>{{ vehicle.type }}</p>
+                <a href="{{ url_for('book', vehicle=vehicle.type) }}" class="btn btn-primary btn-block mt-2">Select</a>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="text-center mt-2">
+            <a href="{{ url_for('vehicles') }}" class="btn btn-primary">View All Vehicles</a>
+        </div>
+    </div>
+</section>
+
+<!-- Testimonials -->
+<section class="section">
+    <div class="container">
+        <h2 class="section-title">What Villagers Say</h2>
+        <div class="card-grid">
+            <div class="card">
+                <p>"Best service for going to the city hospital. Very punctual."</p>
+                <p style="margin-top: 1rem; font-weight: bold;">- Rajesh K.</p>
+            </div>
+            <div class="card">
+                <p>"Driver was very polite and drove safely. Good for ladies."</p>
+                <p style="margin-top: 1rem; font-weight: bold;">- Sunita D.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}

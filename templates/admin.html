@@ -1,0 +1,134 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<section class="section">
+    <div class="container">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h2 class="section-title" style="margin-bottom: 0;">Admin Dashboard</h2>
+            <a href="{{ url_for('logout') }}" class="btn btn-secondary">Logout</a>
+        </div>
+
+        <!-- Bookings -->
+        <h3 class="mb-2">Recent Bookings</h3>
+        <div class="table-responsive mb-2">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Date/Time</th>
+                        <th>Customer</th>
+                        <th>Route</th>
+                        <th>Vehicle</th>
+                        <th>Status</th>
+                        <th>Safety</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for booking in bookings %}
+                    <tr>
+                        <td>#{{ booking.id }}</td>
+                        <td>{{ booking.date_time.strftime('%d-%b %H:%M') }}</td>
+                        <td>
+                            {{ booking.customer_name }}<br>
+                            <small>{{ booking.phone }}</small>
+                        </td>
+                        <td>
+                            <span style="color: green;">From:</span> {{ booking.pickup_location }}<br>
+                            <span style="color: red;">To:</span> {{ booking.drop_location }}
+                        </td>
+                        <td>{{ booking.vehicle_type }}</td>
+                        <td>
+                            <span
+                                style="padding: 4px 8px; border-radius: 4px; 
+                                background: {% if booking.status == 'Confirmed' %}#d4edda{% elif booking.status == 'Pending' %}#fff3cd{% else %}#f8d7da{% endif %};
+                                color: {% if booking.status == 'Confirmed' %}#155724{% elif booking.status == 'Pending' %}#856404{% else %}#721c24{% endif %}; font-weight: bold;">
+                                {{ booking.status }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if booking.privacy_mode %}
+                            <span title="Privacy Mode" style="font-size: 1.2rem;">🛡️</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <form action="{{ url_for('update_booking_status', id=booking.id) }}" method="POST"
+                                style="display: flex; gap: 5px;">
+                                <button type="submit" name="status" value="Confirmed" class="btn btn-primary"
+                                    style="padding: 5px 10px; font-size: 0.8rem;" title="Confirm">✔</button>
+                                <button type="submit" name="status" value="Cancelled" class="btn btn-accent"
+                                    style="padding: 5px 10px; font-size: 0.8rem;" title="Cancel">✖</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center">No bookings found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Complaints & Bans -->
+        <h3 class="mb-2 mt-2" style="color: #d32f2f;">Recent Complaints</h3>
+        <div class="table-responsive mb-2">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Status</th>
+                        <th>Driver</th>
+                        <th>Reason</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for complaint in complaints %}
+                    <tr>
+                        <td>{{ complaint.date_time.strftime('%d-%b') }}</td>
+                        <td><span style="color: red;">{{ complaint.status }}</span></td>
+                        <td>ID: {{ complaint.driver_id }}</td>
+                        <td>{{ complaint.reason }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center">No complaints.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Drivers -->
+        <h3 class="mb-2 mt-2">All Drivers</h3>
+        <div class="card-grid">
+            {% for driver in drivers %}
+            <div class="card"
+                style="text-align: left; display: flex; align-items: center; gap: 1rem; padding: 1rem; {% if driver.is_banned %}background: #ffebee;{% endif %}">
+                <div style="flex-grow: 1;">
+                    <h4 style="margin: 0;">{{ driver.name }} {% if driver.is_banned %}<span
+                            style="color: red;">(BANNED)</span>{% endif %}</h4>
+                    <p style="color: #666;">{{ driver.phone }}</p>
+                    <p style="color: #666;">Complaints: {{ driver.complaint_count }}</p>
+                    <p
+                        style="font-size: 0.8rem; {% if driver.agreement_accepted %}color: green;{% else %}color: orange;{% endif %}">
+                        {% if driver.agreement_accepted %}✓ Logic Accepted{% else %}⚠ Agreement Pending{% endif %}
+                    </p>
+                </div>
+                <div>
+                    <form action="{{ url_for('toggle_ban', id=driver.id) }}" method="POST">
+                        {% if driver.is_banned %}
+                        <button type="submit" class="btn btn-primary btn-sm">Unban</button>
+                        {% else %}
+                        <button type="submit" class="btn btn-accent btn-sm"
+                            style="background: red; color: white;">Ban</button>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+    </div>
+</section>
+{% endblock %}

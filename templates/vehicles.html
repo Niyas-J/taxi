@@ -1,0 +1,31 @@
+{% extends "layout.html" %}
+
+{% block content %}
+
+<section class="section">
+    <div class="container">
+        <h2 class="section-title">Our Vehicles & Pricing</h2>
+        <div class="card-grid">
+            {% for vehicle in vehicles %}
+            <div class="card">
+                <div
+                    style="background-color: #eee; height: 180px; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-bottom: 1rem;">
+                    <!-- Placeholder icon if no image -->
+                    <i class="fas fa-car-side" style="font-size: 4rem; color: #999;"></i>
+                </div>
+                <h3>{{ vehicle.name }}</h3>
+                <p style="color: #666;">Type: {{ vehicle.type }}</p>
+                <div
+                    style="margin: 1rem 0; border-top: 1px solid #eee; border-bottom: 1px solid #eee; padding: 0.5rem 0;">
+                    <p><strong>Base Fare:</strong> ₹{{ vehicle.base_fare }}</p>
+                    <p><strong>Per km:</strong> ₹{{ vehicle.price_per_km }}</p>
+                </div>
+                <a href="{{ url_for('book', vehicle=vehicle.type) }}" class="btn btn-primary btn-block">Book This
+                    Vehicle</a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+
+{% endblock %}
