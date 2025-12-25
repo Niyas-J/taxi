@@ -1,29 +1,40 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
-from database import db, init_db, User, Vehicle, Driver, Booking, Complaint
+# Import helper functions from new database.py
+from database import (
+    Booking, Driver, Vehicle, Complaint, User,
+    get_all_vehicles, get_active_drivers, get_all_drivers, get_driver_by_phone, get_driver_by_id, update_driver,
+    add_booking, get_all_bookings, update_booking_status, add_complaint, get_all_complaints
+)
 import urllib.parse
 from datetime import datetime
+import os
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'dev-secret-key-change-in-prod'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///taxi.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# Use a consistent secret key
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-prod')
 
-db.init_app(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
 
+# Simple Admin User for Auth (ID=1)
+# Password: admin123
+ADMIN_PASS_HASH = generate_password_hash('admin123')
+
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    if user_id == '1':
+        return User(id=1, username='admin', password_hash=ADMIN_PASS_HASH)
+    return None
 
 # --- Public Routes ---
 
 @app.route('/')
 def index():
-    vehicles = Vehicle.query.all()
-    drivers = Driver.query.filter_by(is_active=True, is_banned=False).all()
-    return render_template('index.html', vehicles=vehicles, active_drivers=drivers)
+    vehicles = get_all_vehicles()
+    active_drivers = get_active_drivers()
+    return render_template('index.html', vehicles=vehicles, active_drivers=active_drivers)
 
 @app.route('/book', methods=['GET', 'POST'])
 def book():
@@ -32,40 +43,43 @@ def book():
         phone = request.form.get('phone')
         pickup = request.form.get('pickup')
         drop = request.form.get('drop')
-        date_str = request.form.get('date') # Expected format from HTML date-local input
+        date_str = request.form.get('date') 
         vehicle_type = request.form.get('vehicle')
         privacy_mode = True if request.form.get('privacy_mode') else False
         
-        # Save to DB
+        # Format Date
         try:
-            date_time = datetime.strptime(date_str, '%Y-%m-%dT%H:%M') if date_str else datetime.now()
+             # Just store as object or string for Firestore
+             if date_str:
+                 date_obj = datetime.strptime(date_str, '%Y-%m-%dT%H:%M')
+             else:
+                 date_obj = datetime.now()
         except ValueError:
-            date_time = datetime.now()
+            date_obj = datetime.now()
 
-        new_booking = Booking(
-            customer_name=name,
-            phone=phone,
-            pickup_location=pickup,
-            drop_location=drop,
-            vehicle_type=vehicle_type,
-            date_time=date_time,
-            privacy_mode=privacy_mode
-        )
-        db.session.add(new_booking)
-        db.session.commit()
+        booking_data = {
+            'customer_name': name,
+            'phone': phone,
+            'pickup_location': pickup,
+            'drop_location': drop,
+            'vehicle_type': vehicle_type,
+            'date_time': date_obj, # Firestore handles datetime
+            'status': 'Pending',
+            'privacy_mode': privacy_mode,
+            'special_notes': '',
+            'is_completed': False
+        }
+        
+        add_booking(booking_data)
 
         # WhatsApp Integration
-        # Format: "New Booking! Name: ..., Pickup: ..., Drop: ..."
         msg = f"New Booking Request!\nName: {name}\nFrom: {pickup}\nTo: {drop}\nVehicle: {vehicle_type}\nTime: {date_str}"
         if privacy_mode:
             msg = f"🔒 PRIVACY MODE REQUESTED\n" + msg + "\n(Driver: Do not ask personal questions. Minimal interaction.)"
         
-        phone_number = "919876543210" # Replace with actual taxi service number
+        phone_number = "919876543210" 
         encoded_msg = urllib.parse.quote(msg)
         wa_link = f"https://wa.me/{phone_number}?text={encoded_msg}"
-        
-        # If user clicked "Book via WhatsApp", we assume the frontend handles the redirection to WA
-        # If standard submit, we show success page or redirect with success
         
         if 'whatsapp' in request.form:
              return redirect(wa_link)
@@ -73,17 +87,17 @@ def book():
         flash('Booking submitted successfully! We will call you shortly.', 'success')
         return redirect(url_for('index'))
 
-    vehicles = Vehicle.query.all()
+    vehicles = get_all_vehicles()
     return render_template('book.html', vehicles=vehicles)
 
 @app.route('/vehicles')
 def vehicles():
-    vehicles = Vehicle.query.all()
+    vehicles = get_all_vehicles()
     return render_template('vehicles.html', vehicles=vehicles)
 
 @app.route('/drivers')
 def drivers():
-    drivers = Driver.query.filter_by(is_active=True, is_banned=False).all()
+    drivers = get_active_drivers()
     return render_template('drivers.html', drivers=drivers)
 
 @app.route('/services')
@@ -94,24 +108,24 @@ def services():
 def driver_agreement():
     if request.method == 'GET':
         return render_template('driver_agreement.html')
-    return redirect(url_for('index')) # Fallback
+    return redirect(url_for('index')) 
 
 @app.route('/driver-agreement/submit', methods=['POST'])
 def driver_agreement_submit():
     phone = request.form.get('driver_phone')
-    driver = Driver.query.filter_by(phone=phone).first()
+    driver = get_driver_by_phone(phone)
     if driver:
-        driver.agreement_accepted = True
-        db.session.commit()
+        update_driver(driver.id, {'agreement_accepted': True})
         flash('Thank you for pledging to safety!', 'success')
     else:
+        # For prototype, maybe auto-create driver? Or just fail.
         flash('Driver number not found. Please contact admin.', 'error')
     return redirect(url_for('index'))
 
 @app.route('/report', methods=['GET', 'POST'])
 def report_issue():
     if request.method == 'GET':
-        drivers = Driver.query.all()
+        drivers = get_all_drivers()
         return render_template('report.html', drivers=drivers)
     return redirect(url_for('index'))
 
@@ -122,21 +136,27 @@ def submit_complaint():
     details = request.form.get('details')
     full_reason = f"{reason_type}: {details}"
 
-    complaint = Complaint(driver_id=driver_id, reason=full_reason)
-    db.session.add(complaint)
+    complaint_data = {
+        'driver_id': driver_id,
+        'reason': full_reason,
+        'status': 'Pending',
+        'date_time': datetime.now()
+    }
+    add_complaint(complaint_data)
     
     # Auto-ban logic
-    driver = Driver.query.get(driver_id)
+    driver = get_driver_by_id(driver_id)
     if driver:
-        driver.complaint_count += 1
-        if driver.complaint_count >= 3:
-            driver.is_banned = True
-            driver.is_active = False # Remove from active list
+        new_count = driver.complaint_count + 1
+        updates = {'complaint_count': new_count}
+        if new_count >= 3:
+            updates['is_banned'] = True
+            updates['is_active'] = False
             flash('Complaint recorded. Driver has been auto-banned due to repeated complaints.', 'warning')
         else:
              flash('Complaint submitted successfully. We will take action.', 'success')
+        update_driver(driver_id, updates)
     
-    db.session.commit()
     return redirect(url_for('index'))
 
 @app.route('/contact')
@@ -150,8 +170,9 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        user = User.query.filter_by(username=username).first()
-        if user and user.check_password(password):
+        # Check against single admin
+        if username == 'admin' and check_password_hash(ADMIN_PASS_HASH, password):
+            user = User(id=1, username='admin', password_hash=ADMIN_PASS_HASH)
             login_user(user)
             return redirect(url_for('admin_dashboard'))
         flash('Invalid username or password', 'error')
@@ -166,38 +187,33 @@ def logout():
 @app.route('/admin')
 @login_required
 def admin_dashboard():
-    bookings = Booking.query.order_by(Booking.date_time.desc()).all()
-    drivers = Driver.query.all()
-    complaints = Complaint.query.order_by(Complaint.date_time.desc()).all()
+    bookings = get_all_bookings()
+    drivers = get_all_drivers()
+    complaints = get_all_complaints()
     return render_template('admin.html', bookings=bookings, drivers=drivers, complaints=complaints)
 
-@app.route('/admin/driver/<int:id>/toggle-ban', methods=['POST'])
+@app.route('/admin/driver/<id>/toggle-ban', methods=['POST'])
 @login_required
 def toggle_ban(id):
-    driver = Driver.query.get_or_404(id)
-    driver.is_banned = not driver.is_banned
-    # If banned, also deactive
-    if driver.is_banned:
-        driver.is_active = False
-    else:
-        driver.is_active = True
-        
-    db.session.commit()
-    status = "Banned" if driver.is_banned else "Unbanned"
-    flash(f"Driver {driver.name} has been {status}.", 'success')
+    driver = get_driver_by_id(id)
+    if driver:
+        new_ban_status = not driver.is_banned
+        updates = {
+            'is_banned': new_ban_status,
+            'is_active': False if new_ban_status else True
+        }
+        update_driver(id, updates)
+        status = "Banned" if new_ban_status else "Unbanned"
+        flash(f"Driver {driver.name} has been {status}.", 'success')
     return redirect(url_for('admin_dashboard'))
 
-@app.route('/admin/booking/<int:id>/status', methods=['POST'])
+@app.route('/admin/booking/<id>/status', methods=['POST'])
 @login_required
-def update_booking_status(id):
-    booking = Booking.query.get_or_404(id)
+def update_booking_status_route(id):
     new_status = request.form.get('status')
     if new_status:
-        booking.status = new_status
-        db.session.commit()
+        update_booking_status(id, new_status)
     return redirect(url_for('admin_dashboard'))
 
-# Application Start
 if __name__ == '__main__':
-    init_db(app)
     app.run(debug=True, host='0.0.0.0', port=5000)

@@ -1,85 +1,179 @@
-from flask_sqlalchemy import SQLAlchemy
+import firebase_admin
+from firebase_admin import credentials, firestore
+import os
+import json
 from datetime import datetime
-from flask_login import UserMixin
+
+# Initialize Firebase
+# Expects 'FIREBASE_CREDENTIALS' env var to be the JSON content of the service account
+cred_json = os.environ.get('FIREBASE_CREDENTIALS')
+if cred_json:
+    try:
+        cred_dict = json.loads(cred_json)
+        cred = credentials.Certificate(cred_dict)
+        firebase_admin.initialize_app(cred)
+        db_client = firestore.client()
+        print("Firebase initialized successfully.")
+    except Exception as e:
+        print(f"Error initializing Firebase: {e}")
+        db_client = None
+else:
+    print("WARNING: FIREBASE_CREDENTIALS env var not found. Database operations will fail.")
+    db_client = None
+
+# --- Wrapper Classes for Compatibility ---
+# These mimic the SQLAlchemy models so app.py needs fewer changes.
+
+class Booking:
+    def __init__(self, id, customer_name, phone, pickup_location, drop_location, vehicle_type, date_time, status='Pending', special_notes=None, privacy_mode=False, is_completed=False, driver_id=None):
+        self.id = id
+        self.customer_name = customer_name
+        self.phone = phone
+        self.pickup_location = pickup_location
+        self.drop_location = drop_location
+        self.vehicle_type = vehicle_type
+        self.date_time = date_time
+        self.status = status
+        self.special_notes = special_notes
+        self.privacy_mode = privacy_mode
+        self.is_completed = is_completed
+        self.driver_id = driver_id
+
+class Driver:
+    def __init__(self, id, name, phone, vehicle_number, photo_url=None, is_active=True, agreement_accepted=False, is_banned=False, complaint_count=0):
+        self.id = id
+        self.name = name
+        self.phone = phone
+        self.vehicle_number = vehicle_number
+        self.photo_url = photo_url
+        self.is_active = is_active
+        self.agreement_accepted = agreement_accepted
+        self.is_banned = is_banned
+        self.complaint_count = complaint_count
+
+class Vehicle:
+    def __init__(self, name, type, price_per_km, base_fare, image_url=None):
+        self.name = name
+        self.type = type
+        self.price_per_km = price_per_km
+        self.base_fare = base_fare
+        self.image_url = image_url
+
+class Complaint:
+    def __init__(self, id, driver_id, reason, status='Pending', date_time=None, booking_id=None):
+        self.id = id
+        self.driver_id = driver_id
+        self.reason = reason
+        self.status = status
+        self.date_time = date_time
+        self.booking_id = booking_id
+
+class User: # For Admin Auth
+    def __init__(self, id, username, password_hash):
+        self.id = id
+        self.username = username
+        self.password_hash = password_hash
+    
+    @property
+    def is_authenticated(self):
+        return True
+    @property
+    def is_active(self):
+        return True
+    @property
+    def is_anonymous(self):
+        return False
+    def get_id(self):
+        return str(self.id)
+
+
+# --- Helper Functions ---
+
+def get_all_vehicles():
+    # Hardcoding vehicles for simplicity as they don't change often, or fetch from Firestore 'vehicles' collection
+    # Return list of Vehicle objects
+    return [
+        Vehicle("Maruti Dzire", "Sedan", 12, 50),
+        Vehicle("Toyota Innova", "SUV", 18, 100),
+        Vehicle("Bajaj Auto", "Auto", 8, 30)
+    ]
+
+def get_active_drivers():
+    if not db_client: return []
+    docs = db_client.collection('drivers').where('is_active', '==', True).where('is_banned', '==', False).stream()
+    drivers = []
+    for doc in docs:
+        d = doc.to_dict()
+        drivers.append(Driver(id=doc.id, **d))
+    return drivers
+
+def get_all_drivers():
+    if not db_client: return []
+    docs = db_client.collection('drivers').stream()
+    drivers = []
+    for doc in docs:
+        d = doc.to_dict()
+        drivers.append(Driver(id=doc.id, **d))
+    return drivers
+
+def get_driver_by_phone(phone):
+    if not db_client: return None
+    docs = db_client.collection('drivers').where('phone', '==', phone).stream()
+    for doc in docs:
+        return Driver(id=doc.id, **doc.to_dict())
+    return None
+
+def get_driver_by_id(driver_id):
+    if not db_client: return None
+    doc = db_client.collection('drivers').document(str(driver_id)).get()
+    if doc.exists:
+        return Driver(id=doc.id, **doc.to_dict())
+    return None
+
+def update_driver(driver_id, data):
+    if not db_client: return
+    db_client.collection('drivers').document(str(driver_id)).update(data)
+
+def add_booking(data):
+    if not db_client: return
+    # Transform datetime to string or timestamp for Firestore
+    # Here keeping it simple
+    db_client.collection('bookings').add(data)
+
+def get_all_bookings():
+    if not db_client: return []
+    docs = db_client.collection('bookings').order_by('date_time', direction=firestore.Query.DESCENDING).stream()
+    bookings = []
+    for doc in docs:
+        d = doc.to_dict()
+        # Convert timestamp back to datetime if needed, or handle in template
+        # Assuming we store it as string or generic
+        # For this prototype, let's assume 'date_time' is stored compatible
+        bookings.append(Booking(id=doc.id, **d))
+    return bookings
+
+def update_booking_status(booking_id, status):
+    if not db_client: return
+    db_client.collection('bookings').document(str(booking_id)).update({'status': status})
+
+def add_complaint(data):
+    if not db_client: return
+    db_client.collection('complaints').add(data)
+
+def get_all_complaints():
+    if not db_client: return []
+    docs = db_client.collection('complaints').order_by('date_time', direction=firestore.Query.DESCENDING).stream()
+    complaints = []
+    for doc in docs:
+        d = doc.to_dict()
+        complaints.append(Complaint(id=doc.id, **d))
+    return complaints
+
+
+# --- Admin ---
+# Using a simple hardcoded admin for this layer, or fetch from 'users' collection
 from werkzeug.security import generate_password_hash, check_password_hash
-
-db = SQLAlchemy()
-
-class User(UserMixin, db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(100), unique=True, nullable=False)
-    password_hash = db.Column(db.String(200), nullable=False)
-
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
-
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
-
-class Vehicle(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    type = db.Column(db.String(50), nullable=False) # e.g. Sedan, SUV, Auto
-    price_per_km = db.Column(db.Float, nullable=False)
-    base_fare = db.Column(db.Float, default=0.0)
-    image_url = db.Column(db.String(200)) # Placeholder or path
-
-class Driver(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    phone = db.Column(db.String(20), nullable=False)
-    vehicle_number = db.Column(db.String(50), nullable=False)
-    photo_url = db.Column(db.String(200))
-    is_active = db.Column(db.Boolean, default=True)
-    # Safety Features
-    agreement_accepted = db.Column(db.Boolean, default=False)
-    is_banned = db.Column(db.Boolean, default=False)
-    complaint_count = db.Column(db.Integer, default=0)
-
-class Booking(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    customer_name = db.Column(db.String(100), nullable=False)
-    phone = db.Column(db.String(20), nullable=False)
-    pickup_location = db.Column(db.String(200), nullable=False)
-    drop_location = db.Column(db.String(200), nullable=False)
-    vehicle_type = db.Column(db.String(50), nullable=False)
-    date_time = db.Column(db.DateTime, default=datetime.utcnow)
-    status = db.Column(db.String(20), default='Pending') # Pending, Confirmed, Completed, Cancelled
-    special_notes = db.Column(db.Text)
-    # Privacy & Safety
-    privacy_mode = db.Column(db.Boolean, default=False)
-    is_completed = db.Column(db.Boolean, default=False)
-    driver_id = db.Column(db.Integer, db.ForeignKey('driver.id'), nullable=True) # Assigned driver
-
-class Complaint(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    booking_id = db.Column(db.Integer, db.ForeignKey('booking.id'), nullable=True)
-    driver_id = db.Column(db.Integer, db.ForeignKey('driver.id'), nullable=False)
-    reason = db.Column(db.Text, nullable=False)
-    status = db.Column(db.String(20), default='Pending') # Pending, Resolved, Dismissed
-    date_time = db.Column(db.DateTime, default=datetime.utcnow)
-
-
-def init_db(app):
-    with app.app_context():
-        db.create_all()
-        
-        # Create default admin user if not exists
-        if not User.query.filter_by(username='admin').first():
-            admin = User(username='admin')
-            admin.set_password('admin123') # Default password
-            db.session.add(admin)
-            
-        # Add sample data if empty
-        if not Vehicle.query.first():
-            v1 = Vehicle(name="Maruti Dzire", type="Sedan", price_per_km=12, base_fare=50)
-            v2 = Vehicle(name="Toyota Innova", type="SUV", price_per_km=18, base_fare=100)
-            v3 = Vehicle(name="Bajaj Auto", type="Auto", price_per_km=8, base_fare=30)
-            db.session.add_all([v1, v2, v3])
-        
-        if not Driver.query.first():
-            d1 = Driver(name="Ramesh Kumar", phone="+919876543210", vehicle_number="KA-01-AB-1234", is_active=True)
-            d2 = Driver(name="Suresh Singh", phone="+919876543211", vehicle_number="KA-02-CD-5678", is_active=True)
-            db.session.add_all([d1, d2])
-
-        db.session.commit()
+# Admin: admin / admin123
+ADMIN_HASH = "scrypt:32768:8:1$..." # Placeholder, we'll use a simple check in app.py or fetch from DB
+# Actually let's just stick to the simple check_password which app.py uses.
+# We'll create a dummy User object 
